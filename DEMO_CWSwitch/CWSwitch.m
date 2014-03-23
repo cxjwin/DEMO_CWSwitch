@@ -27,11 +27,13 @@ static const NSTimeInterval animationDuration = 0.25;
 
 #pragma mark - DimView
 
-@interface DimView : UIView
+@interface SliderBaseView : UIView
+
+@property (assign, nonatomic) CGRect largeFrame;
 
 @end
 
-@implementation DimView
+@implementation SliderBaseView
 
 - (instancetype)initWithFrame:(CGRect)frame {
 	self = [super initWithFrame:frame];
@@ -43,7 +45,6 @@ static const NSTimeInterval animationDuration = 0.25;
 
 - (void)drawRect:(CGRect)rect {
 	CGContextRef context = UIGraphicsGetCurrentContext();
-
 	CGContextClearRect(context, rect);
 	CGPathRef imagePath =
 	CGPathCreateWithRoundedRect(rect, CGRectGetHeight(rect) * 0.5, CGRectGetHeight(rect) * 0.5, &CGAffineTransformIdentity);
@@ -51,6 +52,13 @@ static const NSTimeInterval animationDuration = 0.25;
 	CGPathRelease(imagePath);
 	CGContextSetFillColorWithColor(context, [UIColor whiteColor].CGColor);
 	CGContextFillPath(context);
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    if (CGRectEqualToRect(self.frame, self.largeFrame)) {
+        [self setNeedsDisplay];
+    }
 }
 
 @end
@@ -61,7 +69,7 @@ static const NSTimeInterval animationDuration = 0.25;
 
 @property (retain, nonatomic) UIView *slider;
 
-@property (retain, nonatomic) DimView *dimView;
+@property (retain, nonatomic) SliderBaseView *baseView;
 
 @property (retain, nonatomic) UIView *backgroundView;
 
@@ -69,18 +77,18 @@ static const NSTimeInterval animationDuration = 0.25;
 
 @implementation CWSwitch {
 	BOOL _isOn;
-
+    
 	// slide side
 	BOOL _left;
-
+    
 	// has moved over 'edgePointX'
 	BOOL _isMoveOver;
-
+    
 	// real frame, never change
 	CGRect _frame;
-
+    
 	BOOL _stretchAnimationFlag;
-
+    
 	BOOL _continueFlags[2];
 }
 
@@ -103,16 +111,16 @@ static const NSTimeInterval animationDuration = 0.25;
 		self.backgroundColor = [UIColor clearColor];
         
 		[self addSubview:self.backgroundView];
-		[self addSubview:self.dimView];
+		[self addSubview:self.baseView];
 		[self addSubview:self.slider];
-	}
+    }
 	return self;
 }
 
 - (void)dealloc {
 	[_slider release], _slider = nil;
 	[_backgroundView release], _backgroundView = nil;
-	[_dimView release], _dimView = nil;
+	[_baseView release], _baseView = nil;
 	[super dealloc];
 }
 
@@ -130,7 +138,7 @@ static const NSTimeInterval animationDuration = 0.25;
 
 - (void)setFrame:(CGRect)frame {
 	CGRect realFrame = CGRectMake(CGRectGetMinX(frame), CGRectGetMinY(frame), viewWidth, viewHeight);
-
+    
 	_frame = realFrame;
 	[super setFrame:realFrame];
 }
@@ -148,18 +156,19 @@ static const NSTimeInterval animationDuration = 0.25;
 		view.layer.cornerRadius = CGRectGetHeight(view.frame) * 0.5;
 		_backgroundView = view;
 	}
-
+    
 	return _backgroundView;
 }
 
-- (DimView *)dimView {
-	if (!_dimView) {
-		DimView *view =
-		[[DimView alloc] initWithFrame:CGRectMake(edgeGap, edgeGap, dimViewWidth, dimViewHeight)];
+- (SliderBaseView *)baseView {
+	if (!_baseView) {
+		SliderBaseView *view =
+		[[SliderBaseView alloc] initWithFrame:CGRectMake(edgeGap, edgeGap, dimViewWidth, dimViewHeight)];
+        view.largeFrame = view.frame;
 		view.userInteractionEnabled = NO;
-		_dimView = view;
+		_baseView = view;
 	}
-	return _dimView;
+	return _baseView;
 }
 
 - (UIView *)slider {
@@ -187,6 +196,7 @@ static const NSTimeInterval animationDuration = 0.25;
 
 - (void)setOn:(BOOL)on animated:(BOOL)animated {
 	_isOn = on;
+    [self sendActionsForControlEvents:UIControlEventValueChanged];
 	if (animated) {
 		[self slideAnimationWithStatus:on];
 	}
@@ -199,13 +209,13 @@ static const NSTimeInterval animationDuration = 0.25;
 - (void)slideFrameWithStatus:(BOOL)on {
 	if (on) {
 		self.slider.frame = CGRectMake(CGRectGetWidth(self.frame) - sliderWidth - edgeGap, edgeGap, sliderWidth, sliderHeight);
-		self.dimView.frame =
-		CGRectMake(CGRectGetMidX(self.frame), (CGRectGetHeight(self.frame) - dimViewShrinkHeight) * 0.5, dimViewShrinkWidth, dimViewShrinkHeight);
+		self.baseView.frame =
+		CGRectMake(CGRectGetWidth(self.frame) * 0.5, (CGRectGetHeight(self.frame) - dimViewShrinkHeight) * 0.5, dimViewShrinkWidth, dimViewShrinkHeight);
 		self.backgroundView.backgroundColor = [self greenBackgroundColor];
 	}
 	else {
 		self.slider.frame = CGRectMake(edgeGap, edgeGap, sliderWidth, sliderHeight);
-		self.dimView.frame = CGRectMake(edgeGap, edgeGap, dimViewWidth, dimViewHeight);
+		self.baseView.frame = CGRectMake(edgeGap, edgeGap, dimViewWidth, dimViewHeight);
 		self.backgroundView.backgroundColor = [self grayBackgroundColor];
 	}
 }
@@ -222,7 +232,7 @@ static const NSTimeInterval animationDuration = 0.25;
 	else {
 		animations = ^{
 			self.slider.frame = CGRectMake(edgeGap, edgeGap, sliderWidth, sliderHeight);
-			self.dimView.frame = CGRectMake(edgeGap, edgeGap, dimViewWidth, dimViewHeight);
+			self.baseView.frame = CGRectMake(edgeGap, edgeGap, dimViewWidth, dimViewHeight);
 			self.backgroundView.backgroundColor = [self grayBackgroundColor];
 		};
 	}
@@ -238,21 +248,21 @@ static const NSTimeInterval animationDuration = 0.25;
 // begin
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
 	NSTimeInterval minInterval = 0.05;
-
+    
 	if (_stretchAnimationFlag) {
 		[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(stretchAnimation) object:nil];
 	}
 	else {
 		_stretchAnimationFlag = YES;
 	}
-
+    
 	// slider is at left or right
 	_left = !_isOn;
-
+    
 	if (_left) {
 		void (^animations)() = ^{
-			self.dimView.frame =
-			CGRectMake(CGRectGetMidX(self.frame), (CGRectGetHeight(self.frame) - dimViewShrinkHeight) * 0.5, dimViewShrinkWidth, dimViewShrinkHeight);
+			self.baseView.frame =
+			CGRectMake(CGRectGetWidth(self.frame) * 0.5, (CGRectGetHeight(self.frame) - dimViewShrinkHeight) * 0.5, dimViewShrinkWidth, dimViewShrinkHeight);
 		};
 		[UIView animateWithDuration:animationDuration
 		                      delay:0.0
@@ -262,7 +272,7 @@ static const NSTimeInterval animationDuration = 0.25;
 	}
 	// stretch animation
 	[self performSelector:@selector(stretchAnimation) withObject:nil afterDelay:minInterval];
-
+    
 	return [super beginTrackingWithTouch:touch withEvent:event];
 }
 
@@ -277,8 +287,8 @@ static const NSTimeInterval animationDuration = 0.25;
 			}
 			else {
 				self.slider.frame = CGRectMake(edgeGap, edgeGap, sliderStretchWidth, sliderHeight);
-				self.dimView.frame =
-				CGRectMake(CGRectGetMidX(self.frame), (CGRectGetHeight(self.frame) - dimViewShrinkHeight) * 0.5, dimViewShrinkWidth, dimViewShrinkHeight);
+				self.baseView.frame =
+				CGRectMake(CGRectGetWidth(self.frame) * 0.5, (CGRectGetHeight(self.frame) - dimViewShrinkHeight) * 0.5, dimViewShrinkWidth, dimViewShrinkHeight);
 			}
 		};
 		[UIView animateWithDuration:animationDuration
@@ -293,19 +303,19 @@ static const NSTimeInterval animationDuration = 0.25;
 - (BOOL)continueTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
 	CGPoint location = [touch locationInView:self.backgroundView];
 	BOOL left = _left;
-
+    
 	// first time is left edge or right edge
 	// then every time is middle
 	// UISwitch's logic is not easy to understand, it's my own logic.
 	CGFloat edgePointX;
-
+    
 	if (left) {
 		edgePointX = CGRectGetMaxX(self.backgroundView.frame);
 	}
 	else {
 		edgePointX = CGRectGetMinX(self.backgroundView.frame);
 	}
-
+    
 	if (_isOn) {                             // open
 		if (_continueFlags[0]) {             // left edge
 			if (_continueFlags[1]) {         // middle
@@ -344,7 +354,7 @@ static const NSTimeInterval animationDuration = 0.25;
 			}
 		}
 	}
-
+    
 	// real left or right to set animation
 	if (location.x > edgePointX) {
 		_left = NO;
@@ -352,7 +362,7 @@ static const NSTimeInterval animationDuration = 0.25;
 	else {
 		_left = YES;
 	}
-
+    
 	//
 	if (_continueFlags[0] || _continueFlags[1]) {
 		_isMoveOver = YES;
@@ -360,7 +370,7 @@ static const NSTimeInterval animationDuration = 0.25;
 	else {
 		_isMoveOver = NO;
 	}
-
+    
 	void (^animations)() = ^{
 		if (_left) {
 			CGRect sliderFrame = CGRectMake(edgeGap, edgeGap, sliderStretchWidth, sliderHeight);
@@ -380,7 +390,7 @@ static const NSTimeInterval animationDuration = 0.25;
 	                    options:UIViewAnimationOptionBeginFromCurrentState
 	                 animations:animations
 	                 completion:nil];
-
+    
 	return [super continueTrackingWithTouch:touch withEvent:event];
 }
 
@@ -389,7 +399,7 @@ static const NSTimeInterval animationDuration = 0.25;
 	_stretchAnimationFlag = NO;
 	_continueFlags[0] = NO;
 	_continueFlags[1] = NO;
-
+    
 	BOOL on;
 	if (_isMoveOver) {
 		on = !_left;
@@ -398,7 +408,7 @@ static const NSTimeInterval animationDuration = 0.25;
 	else {
 		on = !_isOn;
 	}
-
+    
 	[self setOn:on animated:YES];
 	[super endTrackingWithTouch:touch withEvent:event];
 }
